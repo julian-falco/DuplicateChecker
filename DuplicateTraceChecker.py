@@ -197,6 +197,8 @@ try:
     series = input("What is the name of the series?: ")
     num = int(input("How many sections are in this series?: "))
     location = input("What is the folder directory for the series?: ")
+    
+    print("\nFinding duplicates...\n")
 
 
 
