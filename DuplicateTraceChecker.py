@@ -1,3 +1,5 @@
+import os
+
 def checkDuplicateTraces(traces):
     """For a list of traces under the same object name and section, return indices of duplicates after first instance"""
     
@@ -190,15 +192,36 @@ def formatNumberList(numList):
         else:
             outputStr += str(pair[0]) + "-" + str(pair[1]) + comma
     
-    return outputStr         
+    return outputStr   
 
+
+
+def getSeriesNameAndNum(dirPath):
+    """Return the series name and section number in a given folder"""
+    
+    os.chdir(dirPath)
+    # find the series file
+    for file in os.listdir("."):
+        if file.endswith(".ser"):
+            seriesName = str(file).replace(".ser", "")
+    
+    # find out how many sections there are
+    sectionNum = 0
+    end = False
+    while os.path.isfile(seriesName + "." + str(sectionNum)):
+        sectionNum += 1
+        
+    return seriesName, sectionNum
+
+
+# BEGINNING OF MAIN
 
 try:
-    series = input("What is the name of the series?: ")
-    num = int(input("How many sections are in this series?: "))
     location = input("What is the folder directory for the series?: ")
     
-    print("\nFinding duplicates...\n")
+    series, num = getSeriesNameAndNum(location)
+    
+    print("\nFinding duplicates for " + series + " across " + str(num) + " sections...\n")
 
 
 
