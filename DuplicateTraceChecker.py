@@ -1,4 +1,5 @@
-import os
+from tkinter import *
+from tkinter.filedialog import *
 
 def checkDuplicateTraces(traces):
     """For a list of traces under the same object name and section, return indices of duplicates after first instance"""
@@ -196,29 +197,40 @@ def formatNumberList(numList):
 
 
 
-def getSeriesNameAndNum(dirPath):
-    """Return the series name and section number in a given folder"""
-    
-    os.chdir(dirPath)
-    # find the series file
-    for file in os.listdir("."):
-        if file.endswith(".ser"):
-            seriesName = str(file).replace(".ser", "")
+def getSeriesInfo(fileName):
+    """Return the series name, file path, and section number"""
+
+    # split up the name and file path
+    seriesName = fileName[fileName.rfind("/")+1:].replace(".ser", "")
+    filePath = fileName[:fileName.rfind("/")]
     
     # find out how many sections there are
     sectionNum = 0
-    while os.path.isfile(seriesName + "." + str(sectionNum)):
+    lastSection = False
+    while not lastSection:
+        try:
+            f = open(filePath + "/" + seriesName + "." + str(sectionNum))
+            f.close()
+        except:
+            lastSection = True
         sectionNum += 1
+    
+    sectionNum -= 1
         
-    return seriesName, sectionNum
+    return seriesName, filePath, sectionNum
 
 
 # BEGINNING OF MAIN
 
 try:
-    location = input("What is the folder directory for the series?: ")
-    
-    series, num = getSeriesNameAndNum(location)
+    print("Please locate the series file that you wish to check for trace duplicates.")
+    input("Press enter to open your file browser.\n")
+    Tk().withdraw()
+    fileName = askopenfilename(title="Open a Series File",
+                               filetypes=(("Series File", "*.ser"),
+                                          ("All Files","*.*")))
+    print("Retrieving series info...\n")
+    series, location, num = getSeriesInfo(fileName)
     
     print("\nFinding duplicates for " + series + " across " + str(num) + " sections...\n")
 
@@ -272,15 +284,17 @@ try:
             print(obj + " is duplicated on section(s) " + formatNumberList(objectsDuplicated[obj]))
 
         # prompt for duplicates removal
-        remove = input("Would you like to remove these duplicates? (y/n): ")
+        remove = input("\nWould you like to remove these duplicates? (y/n): ")
 
         if remove == "y":
 
             # get a new file location, make sure its different from the old one
-            newLocation = input("What is the directory for the empty folder?: ")
+            newLocation = location
             while newLocation == location:
-                print("Old and new file paths cannot be the same.")
-                newLocation = input("What is the directory for the empty folder?: ")
+                print("\nPlease locate an empty folder to contain the new series.")
+                input("Press enter to open your file browser.\n")
+                Tk().withdraw()
+                newLocation = askdirectory()
 
             # remove the duplicate traces and write new files
             print("Removing duplicate traces...")
