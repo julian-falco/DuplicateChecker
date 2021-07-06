@@ -225,10 +225,13 @@ def getSeriesInfo(fileName):
 try:
     print("Please locate the series file that you wish to check for trace duplicates.")
     input("Press enter to open your file browser.\n")
+    print("If your file browser does not appear to open, try minimizing other windows.\n" +
+          "The file browser may be behind those other windows.\n")
     Tk().withdraw()
     fileName = askopenfilename(title="Open a Series File",
                                filetypes=(("Series File", "*.ser"),
                                           ("All Files","*.*")))
+    
     print("Retrieving series info...\n")
     series, location, num = getSeriesInfo(fileName)
     
