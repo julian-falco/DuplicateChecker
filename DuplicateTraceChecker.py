@@ -1,5 +1,7 @@
+import os
 from tkinter import *
 from tkinter.filedialog import *
+import numpy as np
 
 def checkDuplicateTraces(traces):
     """For a list of traces under the same object name and section, return indices of duplicates after first instance"""
@@ -50,8 +52,10 @@ def loadTraces(fileName):
             
             # check if there are still points there, stop recording otherwise
             if len(coords) == 2:
-                trace.append(round(float(coords[0]), 3))
-                trace.append(round(float(coords[1]), 3))
+                point = [[float(coords[0])],[float(coords[1])],[1]]
+                point = np.matmul(transformation, point)
+                trace.append(round(point[0][0],3))
+                trace.append(round(point[1][0],3))
             else:
                 recording = False
                 
@@ -72,8 +76,24 @@ def loadTraces(fileName):
                 firstLine = True
                 objName = line.split('"')[1]
                 trace = []
+                
+                # grab the transformation
+                trans_i = lineIndex
+                while not "xcoef=" in lines[trans_i]:
+                    trans_i -= 1
+                xcoef = [float(x) for x in lines[trans_i].split()[1:4]]
+                ycoef = [float(y) for y in lines[trans_i+1].split()[1:4]]
+                transformation = coefToTransformation(xcoef, ycoef)
+
+                
     
     return allTraces
+
+def coefToTransformation(xcoef, ycoef):
+    """Return transformation data based on the xcoef and ycoef"""
+    return np.linalg.inv(np.array([[xcoef[1], xcoef[2], xcoef[0]],
+                   [ycoef[1], ycoef[2], ycoef[0]],
+                   [0, 0, 1]]))
 
 
 
@@ -198,44 +218,50 @@ def formatNumberList(numList):
 
 
 def getSeriesInfo(fileName):
-    """Return the series name, file path, and section number"""
+    """Return the series name and number of sections."""
 
-    # split up the name and file path
-    seriesName = fileName[fileName.rfind("/")+1:].replace(".ser", "")
-    filePath = fileName[:fileName.rfind("/")]
+    # get only the name
+    series_name = fileName[fileName.rfind("/")+1:fileName.rfind(".")]
+    file_path = fileName[:fileName.rfind("/")+1]
+    os.chdir(file_path)
     
     # find out how many sections there are
-    sectionNum = 0
-    lastSection = False
-    while not lastSection:
-        try:
-            f = open(filePath + "/" + seriesName + "." + str(sectionNum))
-            f.close()
-        except:
-            lastSection = True
-        sectionNum += 1
+    section_nums = []
     
-    sectionNum -= 1
-        
-    return seriesName, filePath, sectionNum
+    # search each file in the folder that ends with a number
+    for file in os.listdir():
+        try:
+            section_nums.append(int(file[file.rfind(".")+1:]))
+        except:
+            pass
+
+    # sort the section numbers so they are in order
+    section_nums.sort()
+
+    return series_name, file_path, section_nums
 
 
 # BEGINNING OF MAIN
 
 try:
     print("Please locate the series file that you wish to check for trace duplicates.")
-    input("Press enter to open your file browser.\n")
-    print("If your file browser does not appear to open, try minimizing other windows.\n" +
-          "The file browser may be behind those other windows.\n")
-    Tk().withdraw()
+    input("Press enter to open your file browser.")
+
+    root = Tk()
+    root.attributes("-topmost", True)
+    root.withdraw()
     fileName = askopenfilename(title="Open a Series File",
                                filetypes=(("Series File", "*.ser"),
                                           ("All Files","*.*")))
+
+    if not fileName:
+        raise Exception("No series file was selected.")
     
-    print("Retrieving series info...\n")
-    series, location, num = getSeriesInfo(fileName)
+    print("\nRetrieving series info...")
+    series, location, section_nums = getSeriesInfo(fileName)
     
-    print("\nFinding duplicates for " + series + " across " + str(num) + " sections...\n")
+    print("\nFinding duplicates for " + series + " across " + str(len(section_nums)) + " sections...")
+    print("This may take up to a few minutes.")
 
 
 
@@ -248,10 +274,10 @@ try:
     objectsDuplicated = {}
 
     # iterate through all section files
-    for i in range(num):
+    for i in section_nums:
         
         # load all the traces from a single section into a dictionary
-        allTraces = loadTraces(location + "\\" + series + "." + str(i))
+        allTraces = loadTraces(series + "." + str(i))
         
         # store duplicate object instances on this section in dictionary
         allDuplicates = {}
@@ -281,10 +307,11 @@ try:
     objects.sort()
 
     if len(objectsDuplicated) == 0:
-        print("There are no duplicated objects.")
+        print("\nThere are no duplicated objects.")
     else:
+        print()
         for obj in objects:
-            print(obj + " is duplicated on section(s) " + formatNumberList(objectsDuplicated[obj]))
+            print(obj + " is duplicated on section(s): " + formatNumberList(objectsDuplicated[obj]))
 
         # prompt for duplicates removal
         remove = input("\nWould you like to remove these duplicates? (y/n): ")
@@ -295,19 +322,20 @@ try:
             newLocation = location
             while newLocation == location:
                 print("\nPlease locate an empty folder to contain the new series.")
-                input("Press enter to open your file browser.\n")
-                Tk().withdraw()
+                input("Press enter to open your file browser.")
                 newLocation = askdirectory()
+                if not newLocation:
+                    raise Exception("No folder selected.")
 
             # remove the duplicate traces and write new files
-            print("Removing duplicate traces...")
-            for i in range(num):
+            print("\nRemoving duplicate traces...")
+            for i in section_nums:
                 removeDuplicates(location + "\\" + series + "." + str(i),
                                  newLocation + "\\" + series + "." + str(i),
                                  masterList[i])
 
             # copy over exact same series file
-            print("Copying original series file...")
+            print("\nCopying original series file...")
 
             oldSeriesFile = open(location + "\\" + series + ".ser", "r")
             newSeriesFile = open(newLocation + "\\" + series + ".ser", "w")
