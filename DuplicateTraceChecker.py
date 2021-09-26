@@ -261,7 +261,7 @@ try:
     series, location, section_nums = getSeriesInfo(fileName)
     
     print("\nFinding duplicates for " + series + " across " + str(len(section_nums)) + " sections...")
-    print("This may take up to a few minutes.")
+    print("This may take a few minutes.")
 
 
 
