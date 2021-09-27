@@ -98,6 +98,7 @@ def coefToTransformation(xcoef, ycoef):
 
 
 def removeDuplicates(fileLocation, newLocation, duplicates):
+    print(duplicates)
     """Scan through a section file and remove duplicate traces"""
     
     # open, read, and close section file
@@ -112,22 +113,24 @@ def removeDuplicates(fileLocation, newLocation, duplicates):
         
         # keep track of when deleting is occuring
         deleting = False
-        
+
         # iterate through the section file
-        for i in range(len(lines)):
-            
+        i = 0
+        while i < len(lines):
+
+            # grab the line at the index
             line = lines[i]
             
             # if the iterator comes across the object of interest...
-            if ('"' + obj + '"') in line:
+            if ('<Contour name="' + obj + '"') in line:
                 # keep track of how many times the object has appeared
                 counter += 1
                 
                 # if the counter matches a duplicate trace index...
                 if counter in duplicates[obj]:
-                    #start deleting by replacing the line with an empty string
-                    deleting = True                    
-                    lines[i] = ""
+
+                    # start deleting lines
+                    deleting = True     
                     
                     # check if the trace is on its own or within a group of traces
                     grouped = False
@@ -143,14 +146,22 @@ def removeDuplicates(fileLocation, newLocation, duplicates):
                     # </Transform> donates end of block; if not found, then the trace is grouped
                     if not '</Transform>' in lines[j+1]:
                         grouped = True
-                    
-                    # if trace is not grouped, remove the previous four lines
-                    if not grouped:
-                        for j in range(1,5):
-                            lines[i-j] = ""
+
+                    #if trace is grouped, only remove one line
+                    if grouped:  
+                        del lines[i]
+                        i -= 1
+                    # if trace is not grouped, remove the line plus the previous four lines
+                    else:
+                        for j in range(5):
+                            del lines[i-j]
+                        i -= 4
 
             elif deleting:
-                lines[i] = ""
+                
+                # delete the line
+                del lines[i]
+                i -= 1
                 
                 # if grouped, stop at "\>
                 if '"/>' in line and grouped:
@@ -159,11 +170,14 @@ def removeDuplicates(fileLocation, newLocation, duplicates):
                 elif "</Transform>" in line:
                     deleting = False
 
+            i += 1
+
     # write modified lines to a new file; skip empty strings
     newFile = open(newLocation, "w")
     for line in lines:
         if line:
             newFile.write(line)
+    newFile.close()
 
 
 
@@ -243,113 +257,109 @@ def getSeriesInfo(fileName):
 
 # BEGINNING OF MAIN
 
-try:
-    print("Please locate the series file that you wish to check for trace duplicates.")
-    input("Press enter to open your file browser.")
+print("Please locate the series file that you wish to check for trace duplicates.")
+input("Press enter to open your file browser.")
 
-    root = Tk()
-    root.attributes("-topmost", True)
-    root.withdraw()
-    fileName = askopenfilename(title="Open a Series File",
-                               filetypes=(("Series File", "*.ser"),
-                                          ("All Files","*.*")))
+root = Tk()
+root.attributes("-topmost", True)
+root.withdraw()
+fileName = askopenfilename(title="Open a Series File",
+                           filetypes=(("Series File", "*.ser"),
+                                      ("All Files","*.*")))
 
-    if not fileName:
-        raise Exception("No series file was selected.")
+if not fileName:
+    raise Exception("No series file was selected.")
+
+print("\nRetrieving series info...")
+series, location, section_nums = getSeriesInfo(fileName)
+
+print("\nFinding duplicates for " + series + " across " + str(len(section_nums)) + " sections...")
+print("This may take a few minutes.")
+
+
+
+# record every duplicate on every section
+# this will be a list of dictionaries, with each dictionary representing the duplicates on a single section
+# dictionary format: key = object name, value = list of indices where object is duplicated
+masterList = {}
+
+# keep track of which objects are duplicated on which sections
+objectsDuplicated = {}
+
+# iterate through all section files
+for i in section_nums:
     
-    print("\nRetrieving series info...")
-    series, location, section_nums = getSeriesInfo(fileName)
+    # load all the traces from a single section into a dictionary
+    allTraces = loadTraces(series + "." + str(i))
     
-    print("\nFinding duplicates for " + series + " across " + str(len(section_nums)) + " sections...")
-    print("This may take a few minutes.")
-
-
-
-    # record every duplicate on every section
-    # this will be a list of dictionaries, with each dictionary representing the duplicates on a single section
-    # dictionary format: key = object name, value = list of indices where object is duplicated
-    masterList = []
-
-    # keep track of which objects are duplicated on which sections
-    objectsDuplicated = {}
-
-    # iterate through all section files
-    for i in section_nums:
+    # store duplicate object instances on this section in dictionary
+    allDuplicates = {}
+    
+    # interate through each object in allTraces and check for duplicates
+    for obj in allTraces:
+        duplicates = checkDuplicateTraces(allTraces[obj])
         
-        # load all the traces from a single section into a dictionary
-        allTraces = loadTraces(series + "." + str(i))
+        # if there are duplicates on this section for the given object, add it to the allDuplicates dictionary
+        if len(duplicates) > 0:
+            allDuplicates[obj] = duplicates
+    
+    # after iterating through all objects on the section, check for any duplicate objects
+    for obj in allDuplicates:
         
-        # store duplicate object instances on this section in dictionary
-        allDuplicates = {}
-        
-        # interate through each object in allTraces and check for duplicates
-        for obj in allTraces:
-            duplicates = checkDuplicateTraces(allTraces[obj])
-            
-            # if there are duplicates on this section for the given object, add it to the allDuplicates dictionary
-            if len(duplicates) > 0:
-                allDuplicates[obj] = duplicates
-        
-        # after iterating through all objects on the section, check for any duplicate objects
-        for obj in allDuplicates:
-            
-            # add duplicate objects to dictionary and record section number
-            if obj in objectsDuplicated:
-                objectsDuplicated[obj].append(i)
-            else:
-                objectsDuplicated[obj] = [i]
-        
-        # add allDuplicates dictionary to masterList
-        masterList.append(allDuplicates)
+        # add duplicate objects to dictionary and record section number
+        if obj in objectsDuplicated:
+            objectsDuplicated[obj].append(i)
+        else:
+            objectsDuplicated[obj] = [i]
+    
+    # add allDuplicates dictionary to masterList
+    masterList[i] = allDuplicates
 
-    # print duplicated objects
-    objects = list(objectsDuplicated.keys())
-    objects.sort()
+# print duplicated objects
+objects = list(objectsDuplicated.keys())
+objects.sort()
 
-    if len(objectsDuplicated) == 0:
-        print("\nThere are no duplicated objects.")
-    else:
-        print()
-        for obj in objects:
-            print(obj + " is duplicated on section(s): " + formatNumberList(objectsDuplicated[obj]))
+if len(objectsDuplicated) == 0:
+    print("\nThere are no duplicated objects.")
+else:
+    print()
+    for obj in objects:
+        print(obj + " is duplicated on section(s): " + formatNumberList(objectsDuplicated[obj]))
 
-        # prompt for duplicates removal
-        remove = input("\nWould you like to remove these duplicates? (y/n): ")
+    # prompt for duplicates removal
+    remove = input("\nWould you like to remove these duplicates? (y/n): ")
 
-        if remove == "y":
+    if remove == "y":
 
-            # get a new file location, make sure its different from the old one
-            newLocation = location
-            while newLocation == location:
-                print("\nPlease locate an empty folder to contain the new series.")
-                input("Press enter to open your file browser.")
-                newLocation = askdirectory()
-                if not newLocation:
-                    raise Exception("No folder selected.")
+        # get a new file location, make sure its different from the old one
+        newLocation = location
+        while newLocation == location:
+            print("\nPlease locate an empty folder to contain the new series.")
+            input("Press enter to open your file browser.")
+            newLocation = askdirectory()
+            if not newLocation:
+                raise Exception("No folder selected.")
 
-            # remove the duplicate traces and write new files
-            print("\nRemoving duplicate traces...")
-            for i in section_nums:
-                removeDuplicates(location + "\\" + series + "." + str(i),
-                                 newLocation + "\\" + series + "." + str(i),
-                                 masterList[i])
+        # remove the duplicate traces and write new files
+        print("\nRemoving duplicate traces...")
+        for i in section_nums:
+            removeDuplicates(location + "\\" + series + "." + str(i),
+                             newLocation + "\\" + series + "." + str(i),
+                             masterList[i])
 
-            # copy over exact same series file
-            print("\nCopying original series file...")
+        # copy over exact same series file
+        print("\nCopying original series file...")
 
-            oldSeriesFile = open(location + "\\" + series + ".ser", "r")
-            newSeriesFile = open(newLocation + "\\" + series + ".ser", "w")
+        oldSeriesFile = open(location + "\\" + series + ".ser", "r")
+        newSeriesFile = open(newLocation + "\\" + series + ".ser", "w")
 
-            for line in oldSeriesFile.readlines():
-                newSeriesFile.write(line + "\n")
+        for line in oldSeriesFile.readlines():
+            newSeriesFile.write(line + "\n")
 
-            oldSeriesFile.close()
-            newSeriesFile.close()
+        oldSeriesFile.close()
+        newSeriesFile.close()
 
 
-            print("\nCompleted!")
-
-except Exception as e:
-    print("ERROR: " + str(e))
+        print("\nCompleted!")
 
 input("\nPress enter to exit.")
