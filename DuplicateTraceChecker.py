@@ -98,7 +98,6 @@ def coefToTransformation(xcoef, ycoef):
 
 
 def removeDuplicates(fileLocation, newLocation, duplicates):
-    print(duplicates)
     """Scan through a section file and remove duplicate traces"""
     
     # open, read, and close section file
